@@ -1,11 +1,24 @@
 "use client";
 import { useState } from 'react';
 import * as Tone from 'tone';
+import { parseCodeToMusic } from '../lib/audio';
+import axios from 'axios';
 
 export default function Home() {
   const [code, setCode] = useState<string>('');
+  const [isPaid, setIsPaid] = useState<boolean>(false);
   const handleGenerate = async () => {
     await parseCodeToMusic({ code });
+  };
+
+  const handlePayment = async () => {
+    try {
+      const response = await axios.post('/api/checkout');
+      window.location.href = response.data.url;
+    } catch (error) {
+      console.error('Payment error:', error);
+      alert('Payment failed. Try again.');
+    }
   };
 
   return (
