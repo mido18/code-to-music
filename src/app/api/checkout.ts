@@ -5,7 +5,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-06-30.basil',
 });
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function checkout(req: NextApiRequest, res: NextApiResponse) {
   try {
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -24,3 +24,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(500).json({ error: 'Payment failed' });
   }
 }
+
+export { checkout as POST };

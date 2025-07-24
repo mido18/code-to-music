@@ -1,13 +1,26 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import * as Tone from 'tone';
-import { parseCodeToMusic } from '../lib/audio';
+import { parseCodeToMusic,generateMP3 } from '../lib/audio';
 import axios from 'axios';
 
 export default function Home() {
   const [code, setCode] = useState<string>('');
   const [isPaid, setIsPaid] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+
+  // Check for successful payment on page load
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('success')) {
+      setIsPaid(true);
+      localStorage.setItem('isPaid', 'true'); // Persist for MVP
+    }
+    // Load from localStorage (temporary for MVP)
+    if (localStorage.getItem('isPaid') === 'true') {
+      setIsPaid(true);
+    }
+  }, []);
 
   const handleGenerate = async () => {
     if (!code.trim()) {
@@ -26,11 +39,28 @@ export default function Home() {
 
   const handlePayment = async () => {
     try {
-      const response = await axios.post('/api/checkout');
+      const response = await axios.post('/pages/api/checkout');
       window.location.href = response.data.url;
     } catch (error) {
       console.error('Payment error:', error);
       alert('Payment failed. Try again.');
+    }
+  };
+
+  const handleDownload = async () => {
+    try {
+      const mp3Url = await generateMP3(code);
+      if (mp3Url) {
+        const link = document.createElement('a');
+        link.href = mp3Url;
+        link.download = 'code-to-music.mp3';
+        link.click();
+      } else {
+        alert('MP3 generation not implemented yet. Coming soon!');
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      alert('Failed to generate MP3. Try again.');
     }
   };
 
@@ -53,15 +83,11 @@ export default function Home() {
         >
           Generate Music
         </button>
-        <audio controls id="preview" className="mt-4 w-full" />
         <button
-            className={`w-full p-3 text-white rounded-md mt-4 ${
-              isPaid ? 'bg-green-400 hover:bg-green-400' : 'bg-gray-400 cursor-not-allowed'
-            }`}
-            onClick={handlePayment}
-            disabled={!isPaid}
+            className="w-full p-3 text-white rounded-md mt-4 bg-green-400 hover:bg-green-400"
+            onClick={isPaid ? handleDownload : handlePayment}
           >
-            Download MP3 ($1)
+            {isPaid ? 'Download MP3' : 'Pay $1 to Download'}
           </button>
       </div>
     </div>

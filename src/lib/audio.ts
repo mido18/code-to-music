@@ -38,14 +38,17 @@ export const parseCodeToMusic = async ({ code }: CodeInput): Promise<void> => {
       currentSequence.start(0).stop('10s');
       Tone.Transport.start();
   
-      // Stop transport after 10 seconds
-      setTimeout(() => {
-        Tone.Transport.stop();
-        if (currentSequence) {
-          currentSequence.dispose();
-          currentSequence = null;
-        }
-      }, 10000);
+      // Stop transport after 10 seconds and wait for it
+      await new Promise<void>(resolve => {
+        setTimeout(() => {
+          Tone.Transport.stop();
+          if (currentSequence) {
+            currentSequence.dispose();
+            currentSequence = null;
+          }
+          resolve();
+        }, 10000);
+      });
     } catch (error) {
       console.error('Error in parseCodeToMusic:', error);
       throw error;
