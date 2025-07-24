@@ -67,7 +67,7 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
       <div className="bg-white p-8 rounded shadow-md w-2/3 max-w-md">
-        <h1 className="text-2xl font-bold mb-4 text-center">Code-to-Music Generator</h1>
+        <h1 className="text-2xl font-bold mb-4 text-center">Code-To-Music Generator</h1>
         <textarea
           className="w-full p-3 mb-4 border rounded-md focus:ring focus:ring-blue-200 transition duration-300"
           value={code}
