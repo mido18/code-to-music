@@ -1,4 +1,5 @@
 import * as Tone from 'tone';
+import toWav from 'audiobuffer-to-wav';
 
 interface CodeInput {
   code: string;
@@ -56,10 +57,14 @@ export const parseCodeToMusic = async ({ code }: CodeInput): Promise<void> => {
   };
 
 // Placeholder for MP3 generation (requires lamejs)
-export const generateMP3 = async (code: string): Promise<string> => {
-  const buffer = await Tone.Offline(() => parseCodeToMusic({ code }), 10);
-  // Implement MP3 conversion with lamejs (not included in MVP for simplicity)
-  // const mp3 = bufferToMP3(buffer);
-  // return URL.createObjectURL(mp3);
-  return ''; // Return empty for now, add lamejs later
-};
+export const generateAudio = async (code: string): Promise<string> => {
+    try {
+      const buffer = await Tone.Offline(() => parseCodeToMusic({ code }), 10);
+      const wavData = toWav(buffer);
+      const wavBlob = new Blob([wavData], { type: 'audio/wav' });
+      return URL.createObjectURL(wavBlob);
+    } catch (error) {
+      console.error('Error generating WAV:', error);
+      throw error;
+    }
+  };

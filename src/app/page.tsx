@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import * as Tone from 'tone';
-import { parseCodeToMusic,generateMP3 } from '../lib/audio';
+import { parseCodeToMusic,generateAudio } from '../lib/audio';
 import axios from 'axios';
 
 export default function Home() {
@@ -49,18 +49,19 @@ export default function Home() {
 
   const handleDownload = async () => {
     try {
-      const mp3Url = await generateMP3(code);
-      if (mp3Url) {
+      const wavUrl = await generateAudio(code);
+      if (wavUrl) {
         const link = document.createElement('a');
-        link.href = mp3Url;
-        link.download = 'code-to-music.mp3';
+        link.href = wavUrl;
+        link.download = 'code-to-music.wav';
         link.click();
+        URL.revokeObjectURL(wavUrl);
       } else {
-        alert('MP3 generation not implemented yet. Coming soon!');
+        alert('Failed to generate WAV. Try again.');
       }
     } catch (error) {
       console.error('Download error:', error);
-      alert('Failed to generate MP3. Try again.');
+      alert('Failed to generate WAV. Try again.');
     }
   };
 

@@ -9,8 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "audiobuffer-to-wav": "^1.0.0",
     "axios": "^1.11.0",
-    "lamejs": "^1.2.1",
     "next": "15.4.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
