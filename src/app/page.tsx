@@ -39,7 +39,7 @@ export default function Home() {
 
   const handlePayment = async () => {
     try {
-      const response = await axios.post('/pages/api/checkout');
+      const response = await axios.post('/api/checkout');
       window.location.href = response.data.url;
     } catch (error) {
       console.error('Payment error:', error);
