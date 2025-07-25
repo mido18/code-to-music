@@ -49,6 +49,7 @@ export default function Home() {
 
   const handleDownload = async () => {
     try {
+      console.log(`Attempting to download WAV file... for code = ${code}`)
       const wavUrl = await generateAudio(code);
       if (wavUrl) {
         const link = document.createElement('a');
@@ -73,7 +74,7 @@ export default function Home() {
           className="w-full p-3 mb-4 border rounded-md focus:ring focus:ring-blue-200 transition duration-300"
           value={code}
           onChange={(e) => setCode(e.target.value)}
-          placeholder="Paste your code here..."
+          placeholder="Paste JavaScript or Python code (max 1000 characters). Try for loops (drums), variables (piano), if statements (chimes), functions (bass), or comments (pads) for unique sounds!"
           maxLength={1000}
           rows={5}
         />
@@ -88,7 +89,7 @@ export default function Home() {
             className="w-full p-3 text-white rounded-md mt-4 bg-green-400 hover:bg-green-400"
             onClick={isPaid ? handleDownload : handlePayment}
           >
-            {isPaid ? 'Download MP3' : 'Pay $1 to Download'}
+            {isPaid ? 'Download WAV' : 'Pay $1 to Download'}
           </button>
       </div>
     </div>
