@@ -198,7 +198,12 @@ export const generateAudio = async (code: string): Promise<string> => {
 
     console.log('Buffer duration:', buffer.duration, 'samples:', buffer.length);
 
-    const wavData = toWav(buffer);
+    // Convert ToneAudioBuffer to native AudioBuffer for WAV encoding
+    const audioBuffer = buffer.get();
+    if (!audioBuffer) {
+      throw new Error('Failed to retrieve audio buffer from Tone.Offline.');
+    }
+    const wavData = toWav(audioBuffer);
     const wavBlob = new Blob([wavData], { type: 'audio/wav' });
     return URL.createObjectURL(wavBlob);
   } catch (error) {
@@ -208,6 +213,7 @@ export const generateAudio = async (code: string): Promise<string> => {
 };
 
 // Client-side MelodyRNN enhancement
+import type { MusicRNN as MusicRNNType } from '@magenta/music/es6/music_rnn';
 export const enhanceWithMelodyRNN = async (notes: string[]): Promise<string[]> => {
   if (typeof window === 'undefined') {
     // Fallback for server-side
@@ -218,7 +224,7 @@ export const enhanceWithMelodyRNN = async (notes: string[]): Promise<string[]> =
   const mm = await import('@magenta/music/es6/core');
 
   // Use a local instance to avoid global scope issues
-  let melodyRNNInstance: MusicRNN | null = null;
+  let melodyRNNInstance: MusicRNNType | null = null;
   if (!melodyRNNInstance) {
     melodyRNNInstance = new MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/basic_rnn');
     await melodyRNNInstance.initialize();
