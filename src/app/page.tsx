@@ -7,8 +7,11 @@ import { auth, googleProvider } from '../lib/firebase';
 import { signInWithPopup, onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { useRouter } from 'next/navigation';
+
 
 export default function Home() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [code, setCode] = useState<string>('');
   const [isPaid, setIsPaid] = useState<boolean>(false);
@@ -17,27 +20,24 @@ export default function Home() {
   const [isLoadingAuth, setIsLoadingAuth] = useState<boolean>(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
       setIsLoadingAuth(false);
-      if (currentUser) {
-        // Check Firestore for payment status
-        const userDoc = doc(db, 'users', currentUser.uid);
-        const docSnap = await getDoc(userDoc);
-        if (docSnap.exists() && docSnap.data().isPaid) {
-          setIsPaid(true);
-        }
+      if (!user) {
+        // Redirect to sign-in page if not authenticated
+        router.push('/signin');
       }
     });
+
     return () => unsubscribe();
-  }, []);
+  }, [router]);
 
   const handleSignIn = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
       console.error('Sign-in error:', error);
-      alert('Failed to sign in. Try again.');
+      alert('Failed to sign in. Please try again.');
     }
   };
 
@@ -94,20 +94,21 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
       <div className="bg-white p-8 rounded shadow-md w-2/3 max-w-md">
-        <h1 className="text-2xl font-bold mb-4 text-center">Code-To-Music Generator</h1>
-        <p className="text-center mb-4">Paste your code, hear it as music, and download as WAV for $1!</p>
-        {isLoadingAuth ? (
-          <p className="text-center">Loading...</p>
-        ) : !user ? (
-          <button
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 mb-4 w-full"
-            onClick={handleSignIn}
+        <div className="flex justify-center items-center mb-4">
+          <h1 className="text-2xl font-bold text-center">Code-To-Music Generator</h1>
+        </div>
+        <div className="flex justify-center items-center mb-4">
+        <p className="text-center mb-4">
+          Welcome, {user?.displayName}! 
+          <button 
+            onClick={() => auth.signOut()} 
+            className="text-sm text-blue-500 hover:text-blue-700 underline ml-2"
           >
-            Sign In with Google
-          </button>
-        ) : (
-          <p className="text-center mb-4">Welcome, {user.displayName}! <button onClick={() => auth.signOut()} className="text-blue-500 underline">Sign Out</button></p>
-        )}
+            Sign Out
+          </button></p>
+        </div>
+        
+        <p className="text-center mb-4">Paste your code, hear it as music, and download as WAV for $1!</p>
         <textarea
           className="w-full p-3 mb-4 border rounded-md focus:ring focus:ring-blue-200 transition duration-300"
           value={code}
