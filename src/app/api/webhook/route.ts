@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { doc, setDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { adminDb } from '@/lib/firebaseAdmin';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -15,7 +14,6 @@ export async function POST(req: NextRequest) {
   const rawBody = await req.text();
   const buf = Buffer.from(rawBody);
   const sig = req.headers.get('stripe-signature') ?? '';
-  console.log('Stripe webhook received:', rawBody);  
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(buf, sig, webhookSecret);
@@ -29,7 +27,7 @@ export async function POST(req: NextRequest) {
     const userId = session.metadata?.userId;
     if (userId) {
       try {
-        await setDoc(doc(db, 'users', userId), { isPaid: true }, { merge: true });
+        await adminDb.collection('users').doc(userId).set({ isPaid: true }, { merge: true });
         console.log(`Updated payment status for user ${userId}`);
       } catch (error) {
         console.error('Firestore update error:', error);

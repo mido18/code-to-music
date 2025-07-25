@@ -12,6 +12,7 @@
     "audiobuffer-to-wav": "^1.0.0",
     "axios": "^1.11.0",
     "firebase": "^12.0.0",
+    "firebase-admin": "^13.4.0",
     "micro": "^10.0.1",
     "next": "15.4.3",
     "react": "19.1.0",
