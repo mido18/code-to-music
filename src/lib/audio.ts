@@ -1,11 +1,14 @@
 import * as Tone from 'tone';
 import toWav from 'audiobuffer-to-wav';
+import { MusicRNN } from '@magenta/music/es6/music_rnn';
+import * as mm from '@magenta/music/es6/core';
 
 interface CodeInput {
   code: string;
 }
 
 let currentSequence: Tone.Sequence | null = null;
+let melodyRNN: MusicRNN | null = null;
 
 // ----------------------------------
 // Helper utilities
@@ -70,6 +73,88 @@ const triggerNote = (note: string, instruments: ReturnType<typeof createInstrume
   }
 };
 
+/** Convert note sequence to Magenta NoteSequence. */
+const notesToNoteSequence = (notes: string[]): mm.INoteSequence => {
+  const noteSequence: mm.INoteSequence = {
+    notes: [],
+    totalTime: 0,
+    quantizationInfo: { stepsPerQuarter: 4 },
+  };
+
+  let currentTime = 0;
+  const beatDuration = 0.5; // 8th note at 120 BPM
+
+  for (const note of notes) {
+    let pitch: number;
+    let isDrum: boolean;
+
+    switch (note) {
+      case 'drum':
+        pitch = 36; // C2
+        isDrum = true;
+        break;
+      case 'chime':
+        pitch = 64; // E5
+        isDrum = false;
+        break;
+      case 'bass':
+        pitch = 43; // G2
+        isDrum = false;
+        break;
+      case 'pad':
+        pitch = 57; // A3
+        isDrum = false;
+        break;
+      default:
+        pitch = Tone.Frequency(note).toMidi(); // e.g., C4
+        isDrum = false;
+        break;
+    }
+
+    noteSequence.notes!.push({
+      pitch,
+      startTime: currentTime,
+      endTime: currentTime + beatDuration,
+      isDrum,
+    });
+    currentTime += beatDuration;
+  }
+
+  noteSequence.totalTime = currentTime;
+  return noteSequence;
+};
+
+/** Enhance notes with MelodyRNN. */
+const enhanceWithMelodyRNN = async (notes: string[]): Promise<string[]> => {
+  if (!melodyRNN) {
+    melodyRNN = new MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/basic_rnn');
+    await melodyRNN.initialize();
+  }
+
+  const noteSequence = notesToNoteSequence(notes);
+  const quantizedSequence = mm.sequences.quantizeNoteSequence(noteSequence, 4);
+  const rnnSteps = 32; // Generate 32 steps (8 bars)
+  const temperature = 1.0; // Moderate randomness
+
+  try {
+    const enhancedSequence = await melodyRNN.continueSequence(quantizedSequence, rnnSteps, temperature);
+
+    // Map enhanced notes back to instrument IDs
+    const enhancedNotes: string[] = enhancedSequence.notes!.map(note => {
+      if (note.isDrum) return 'drum';
+      if (note.pitch >= 60 && note.pitch < 72) return Tone.Midi(note.pitch).toNote();
+      if (note.pitch >= 72) return 'chime'; // E5 range
+      if (note.pitch < 48) return 'bass'; // G2 range
+      return 'pad'; // A3 range
+    });
+
+    return enhancedNotes;
+  } catch (error) {
+    console.error('MelodyRNN error:', error);
+    return notes; // Fallback to original notes
+  }
+};
+
 export const parseCodeToMusic = async ({ code }: CodeInput): Promise<void> => {
   try {
     await Tone.start();
@@ -88,7 +173,10 @@ export const parseCodeToMusic = async ({ code }: CodeInput): Promise<void> => {
     }
 
     const instruments = createInstruments();
-    const notes = buildNoteSequence(counts);
+    let notes = buildNoteSequence(counts);
+
+    // Enhance notes with MelodyRNN
+    notes = await enhanceWithMelodyRNN(notes);
 
     currentSequence = new Tone.Sequence((time, note) => {
       triggerNote(note as string, instruments, time);
@@ -119,7 +207,9 @@ export const generateAudio = async (code: string): Promise<string> => {
       throw new Error('No audio events generated. Please include loops, variables, if statements, functions, or comments.');
     }
 
-    const notes = buildNoteSequence(counts);
+    let notes = buildNoteSequence(counts);
+    // Enhance notes with MelodyRNN
+    notes = await enhanceWithMelodyRNN(notes);
 
     const buffer = await Tone.Offline(({ transport }) => {
       const instruments = createInstruments();
