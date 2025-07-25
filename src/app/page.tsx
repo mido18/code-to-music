@@ -7,11 +7,12 @@ import { auth, googleProvider } from '../lib/firebase';
 import { signInWithPopup, onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 
 export default function Home() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
   const [code, setCode] = useState<string>('');
   const [isPaid, setIsPaid] = useState<boolean>(false);
@@ -31,6 +32,27 @@ export default function Home() {
 
     return () => unsubscribe();
   }, [router]);
+
+  // Fetch payment status whenever user changes or after Stripe redirect
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchPaymentStatus = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'users', user.uid));
+        setIsPaid(!!snap.data()?.isPaid);
+      } catch (err) {
+        console.error('Failed to fetch payment status', err);
+      }
+    };
+
+    fetchPaymentStatus();
+
+    if (searchParams.get('success') === 'true') {
+      // Poll once more after checkout success to reflect status quickly
+      fetchPaymentStatus();
+    }
+  }, [user, searchParams]);
 
 
   const handleGenerate = async () => {
@@ -52,6 +74,14 @@ export default function Home() {
     if (!user) {
       alert('Please sign in to proceed with payment.');
       return;
+    }
+    // Persist code so it's not lost after Stripe redirect
+    if (code.trim()) {
+      try {
+        localStorage.setItem('pendingCode', code);
+      } catch (e) {
+        console.warn('Unable to access localStorage:', e);
+      }
     }
     try {
       const response = await axios.post('/api/checkout', {
@@ -82,6 +112,19 @@ export default function Home() {
       alert('Failed to generate WAV. Try again.');
     }
   };
+
+  // Restore code saved before Stripe redirect
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('pendingCode');
+      if (saved) {
+        setCode(saved);
+        localStorage.removeItem('pendingCode');
+      }
+    } catch (e) {
+      console.warn('Unable to access localStorage:', e);
+    }
+  }, []);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">

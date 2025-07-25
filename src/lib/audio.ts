@@ -7,6 +7,69 @@ interface CodeInput {
 
 let currentSequence: Tone.Sequence | null = null;
 
+// ----------------------------------
+// Helper utilities
+// ----------------------------------
+
+type PatternCounts = {
+  loops: number;
+  variables: number;
+  conditionals: number;
+  functions: number;
+  comments: number;
+};
+
+/**
+ * Extract how many times each syntactic construct appears in the code.
+ */
+const extractPatternCounts = (code: string): PatternCounts => ({
+  loops: (code.match(/for\s*\(/g) || []).length,
+  variables: (code.match(/\b(let|const|var)\s+\w+/g) || []).length,
+  conditionals: (code.match(/\bif\s*\(/g) || []).length,
+  functions: (code.match(/\bfunction\b|\b=>\b/g) || []).length,
+  comments: (code.match(/\/\/.*|\/\*[\s\S]*?\*\//g) || []).length,
+});
+
+/** Build an ordered array of note/instrument IDs based on counts. */
+const buildNoteSequence = ({ loops, variables, conditionals, functions, comments }: PatternCounts): string[] => (
+  [
+    ...Array(loops).fill('drum'),
+    ...Array(variables).fill('C4'),
+    ...Array(conditionals).fill('chime'),
+    ...Array(functions).fill('bass'),
+    ...Array(comments).fill('pad'),
+  ]
+);
+
+/** Create instrument instances routed to destination. */
+const createInstruments = () => ({
+  drum: new Tone.MembraneSynth().toDestination(),
+  synth: new Tone.Synth().toDestination(),
+  chime: new Tone.MetalSynth().toDestination(),
+  bass: new Tone.MonoSynth().toDestination(),
+  pad: new Tone.PolySynth(Tone.Synth).toDestination(),
+});
+
+/** Trigger the appropriate instrument for a given note id. */
+const triggerNote = (note: string, instruments: ReturnType<typeof createInstruments>, time = 0) => {
+  switch (note) {
+    case 'drum':
+      instruments.drum.triggerAttackRelease('C2', '8n', time);
+      break;
+    case 'chime':
+      instruments.chime.triggerAttackRelease('E5', '8n', time);
+      break;
+    case 'bass':
+      instruments.bass.triggerAttackRelease('G2', '8n', time);
+      break;
+    case 'pad':
+      instruments.pad.triggerAttackRelease('A3', '8n', time);
+      break;
+    default:
+      instruments.synth.triggerAttackRelease(note, '8n', time);
+  }
+};
+
 export const parseCodeToMusic = async ({ code }: CodeInput): Promise<void> => {
   try {
     await Tone.start();
@@ -18,40 +81,17 @@ export const parseCodeToMusic = async ({ code }: CodeInput): Promise<void> => {
     Tone.Transport.stop();
     Tone.Transport.cancel();
 
-    // Parse code for patterns
-    const loops = (code.match(/for\s*\(/g) || []).length;
-    const variables = (code.match(/\b(let|const|var)\s+\w+/g) || []).length;
-    const conditionals = (code.match(/\bif\s*\(/g) || []).length;
-    const functions = (code.match(/\bfunction\b|\b=>\b/g) || []).length;
-    const comments = (code.match(/\/\/.*|\/\*[\s\S]*?\*\//g) || []).length;
-
-    const totalEvents = loops + variables + conditionals + functions + comments;
+    const counts = extractPatternCounts(code);
+    const totalEvents = Object.values(counts).reduce((a, b) => a + b, 0);
     if (totalEvents === 0) {
       throw new Error('No audio events generated. Please include loops, variables, if statements, functions, or comments.');
     }
 
-    // Create instruments
-    const drum = new Tone.MembraneSynth().toDestination(); // For loops
-    const synth = new Tone.Synth().toDestination(); // For variables
-    const chime = new Tone.MetalSynth().toDestination(); // For condition Miranda statements
-    const bass = new Tone.MonoSynth().toDestination(); // For functions
-    const pad = new Tone.PolySynth(Tone.Synth).toDestination(); // For comments
-
-    // Create sequence of notes
-    const notes = [
-      ...Array(loops).fill('drum'),
-      ...Array(variables).fill('C4'),
-      ...Array(conditionals).fill('chime'),
-      ...Array(functions).fill('bass'),
-      ...Array(comments).fill('pad'),
-    ];
+    const instruments = createInstruments();
+    const notes = buildNoteSequence(counts);
 
     currentSequence = new Tone.Sequence((time, note) => {
-      if (note === 'drum') drum.triggerAttackRelease('C2', '8n', time);
-      else if (note === 'chime') chime.triggerAttackRelease('E5', '8n', time);
-      else if (note === 'bass') bass.triggerAttackRelease('G2', '8n', time);
-      else if (note === 'pad') pad.triggerAttackRelease('A3', '8n', time);
-      else synth.triggerAttackRelease(note, '8n', time);
+      triggerNote(note as string, instruments, time);
     }, notes);
 
     Tone.Transport.bpm.value = 120;
@@ -73,31 +113,16 @@ export const parseCodeToMusic = async ({ code }: CodeInput): Promise<void> => {
 
 export const generateAudio = async (code: string): Promise<string> => {
   try {
-    const loops = (code.match(/for\s*\(/g) || []).length;
-    const variables = (code.match(/\b(let|const|var)\s+\w+/g) || []).length;
-    const conditionals = (code.match(/\bif\s*\(/g) || []).length;
-    const functions = (code.match(/\bfunction\b|\b=>\b/g) || []).length;
-    const comments = (code.match(/\/\/.*|\/\*[\s\S]*?\*\//g) || []).length;
-
-    const totalEvents = loops + variables + conditionals + functions + comments;
+    const counts = extractPatternCounts(code);
+    const totalEvents = Object.values(counts).reduce((a, b) => a + b, 0);
     if (totalEvents === 0) {
       throw new Error('No audio events generated. Please include loops, variables, if statements, functions, or comments.');
     }
 
-    const buffer = await Tone.Offline(({ transport }) => {
-      const drum = new Tone.MembraneSynth().toDestination();
-      const synth = new Tone.Synth().toDestination();
-      const chime = new Tone.MetalSynth().toDestination();
-      const bass = new Tone.MonoSynth().toDestination();
-      const pad = new Tone.PolySynth(Tone.Synth).toDestination();
+    const notes = buildNoteSequence(counts);
 
-      const notes = [
-        ...Array(loops).fill('drum'),
-        ...Array(variables).fill('C4'),
-        ...Array(conditionals).fill('chime'),
-        ...Array(functions).fill('bass'),
-        ...Array(comments).fill('pad'),
-      ];
+    const buffer = await Tone.Offline(({ transport }) => {
+      const instruments = createInstruments();
 
       const bpm = 120;
       const beatDuration = 60 / bpm / 2; // 8th note duration
@@ -107,17 +132,7 @@ export const generateAudio = async (code: string): Promise<string> => {
       while (time < maxTime) {
         for (const note of notes) {
           if (time >= maxTime) break;
-          if (note === 'drum') {
-            drum.triggerAttackRelease('C2', '8n', time);
-          } else if (note === 'chime') {
-            chime.triggerAttackRelease('E5', '8n', time);
-          } else if (note === 'bass') {
-            bass.triggerAttackRelease('G2', '8n', time);
-          } else if (note === 'pad') {
-            pad.triggerAttackRelease('A3', '8n', time);
-          } else {
-            synth.triggerAttackRelease(note, '8n', time);
-          }
+          triggerNote(note as string, instruments, time);
           time += beatDuration;
         }
       }
