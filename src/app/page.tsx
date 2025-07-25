@@ -3,24 +3,43 @@ import { useState, useEffect } from 'react';
 import * as Tone from 'tone';
 import { parseCodeToMusic,generateAudio } from '../lib/audio';
 import axios from 'axios';
+import { auth, googleProvider } from '../lib/firebase';
+import { signInWithPopup, onAuthStateChanged, User } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 export default function Home() {
+  const [user, setUser] = useState<User | null>(null);
   const [code, setCode] = useState<string>('');
   const [isPaid, setIsPaid] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
 
-  // Check for successful payment on page load
+  const [isLoadingAuth, setIsLoadingAuth] = useState<boolean>(true);
+
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('success')) {
-      setIsPaid(true);
-      localStorage.setItem('isPaid', 'true'); // Persist for MVP
-    }
-    // Load from localStorage (temporary for MVP)
-    if (localStorage.getItem('isPaid') === 'true') {
-      setIsPaid(true);
-    }
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      setIsLoadingAuth(false);
+      if (currentUser) {
+        // Check Firestore for payment status
+        const userDoc = doc(db, 'users', currentUser.uid);
+        const docSnap = await getDoc(userDoc);
+        if (docSnap.exists() && docSnap.data().isPaid) {
+          setIsPaid(true);
+        }
+      }
+    });
+    return () => unsubscribe();
   }, []);
+
+  const handleSignIn = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error('Sign-in error:', error);
+      alert('Failed to sign in. Try again.');
+    }
+  };
 
   const handleGenerate = async () => {
     if (!code.trim()) {
@@ -38,8 +57,14 @@ export default function Home() {
   };
 
   const handlePayment = async () => {
+    if (!user) {
+      alert('Please sign in to proceed with payment.');
+      return;
+    }
     try {
-      const response = await axios.post('/api/checkout');
+      const response = await axios.post('/api/checkout', {
+        userId: user.uid,
+      });
       window.location.href = response.data.url;
     } catch (error) {
       console.error('Payment error:', error);
@@ -70,6 +95,19 @@ export default function Home() {
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
       <div className="bg-white p-8 rounded shadow-md w-2/3 max-w-md">
         <h1 className="text-2xl font-bold mb-4 text-center">Code-To-Music Generator</h1>
+        <p className="text-center mb-4">Paste your code, hear it as music, and download as WAV for $1!</p>
+        {isLoadingAuth ? (
+          <p className="text-center">Loading...</p>
+        ) : !user ? (
+          <button
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 mb-4 w-full"
+            onClick={handleSignIn}
+          >
+            Sign In with Google
+          </button>
+        ) : (
+          <p className="text-center mb-4">Welcome, {user.displayName}! <button onClick={() => auth.signOut()} className="text-blue-500 underline">Sign Out</button></p>
+        )}
         <textarea
           className="w-full p-3 mb-4 border rounded-md focus:ring focus:ring-blue-200 transition duration-300"
           value={code}
