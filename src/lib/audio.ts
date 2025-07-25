@@ -214,6 +214,9 @@ export const generateAudio = async (code: string): Promise<string> => {
 
 // Client-side MelodyRNN enhancement
 import type { MusicRNN as MusicRNNType } from '@magenta/music/es6/music_rnn';
+// Type-only import for core types (namespace `mm`)
+import type * as mm from '@magenta/music/es6/core';
+
 export const enhanceWithMelodyRNN = async (notes: string[]): Promise<string[]> => {
   if (typeof window === 'undefined') {
     // Fallback for server-side
@@ -221,7 +224,8 @@ export const enhanceWithMelodyRNN = async (notes: string[]): Promise<string[]> =
   }
 
   const { MusicRNN } = await import('@magenta/music/es6/music_rnn');
-  const mm = await import('@magenta/music/es6/core');
+  // Runtime Magenta core module (avoid namespace clash with type import)
+  const mmCore = await import('@magenta/music/es6/core');
 
   // Use a local instance to avoid global scope issues
   let melodyRNNInstance: MusicRNNType | null = null;
@@ -231,7 +235,7 @@ export const enhanceWithMelodyRNN = async (notes: string[]): Promise<string[]> =
   }
 
   // Convert notes to NoteSequence, excluding drums
-  const noteSequence: mm.INoteSequence = {
+  const noteSequence: any = {
     notes: [],
     totalTime: 0,
     quantizationInfo: { stepsPerQuarter: 4 },
@@ -279,7 +283,7 @@ export const enhanceWithMelodyRNN = async (notes: string[]): Promise<string[]> =
     return notes; // Fallback if no melodic notes
   }
 
-  const quantizedSequence = mm.sequences.quantizeNoteSequence(noteSequence, 4);
+  const quantizedSequence = mmCore.sequences.quantizeNoteSequence(noteSequence, 4);
   const rnnSteps = 48; // 12 bars
   const temperature = 0.8; // Catchy melody
 
@@ -288,10 +292,12 @@ export const enhanceWithMelodyRNN = async (notes: string[]): Promise<string[]> =
 
     // Map enhanced notes back to instrument IDs
     let enhancedNotes: string[] = enhancedSequence.notes!.map(n => {
-      if (n.pitch >= 72) return 'chime'; // E5 range
-      if (n.pitch <= 55) return 'bass'; // G3 range
-      if (n.pitch >= 57 && n.pitch < 60) return 'pad'; // A3 range
-      return Tone.Midi(n.pitch).toNote(); // C major scale
+      const pitch = n.pitch;
+      if (pitch == null) return 'pad';
+      if (pitch >= 72) return 'chime'; // E5 range
+      if (pitch <= 55) return 'bass'; // G3 range
+      if (pitch >= 57 && pitch < 60) return 'pad'; // A3 range
+      return Tone.Midi(pitch).toNote(); // C major scale
     });
 
     // Reintroduce drum notes
