@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   const rawBody = await req.text();
   const buf = Buffer.from(rawBody);
   const sig = req.headers.get('stripe-signature') ?? '';
-
+  console.log('Stripe webhook received:', rawBody);  
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(buf, sig, webhookSecret);
@@ -35,6 +35,8 @@ export async function POST(req: NextRequest) {
         console.error('Firestore update error:', error);
         return NextResponse.json({ error: 'Failed to update payment status' }, { status: 500 });
       }
+    } else {
+      console.error('No user ID found in checkout session metadata');
     }
   }
 
