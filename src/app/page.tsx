@@ -157,7 +157,14 @@ export default function Home() {
           onClick={handleGenerate}
           disabled={isGenerating}
         >
-          Generate Music
+          {isGenerating ? (
+              <>
+                <span className="inline-block w-5 h-5 mr-2 border-4 border-white border-t-transparent rounded-full animate-spin"></span>
+                Generating...
+              </>
+            ) : (
+              'Generate Music'
+            )}
         </button>
         <button
             className="w-full p-3 text-white rounded-md mt-4 bg-green-400 hover:bg-green-400"
