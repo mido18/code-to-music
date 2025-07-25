@@ -32,14 +32,6 @@ export default function Home() {
     return () => unsubscribe();
   }, [router]);
 
-  const handleSignIn = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      console.error('Sign-in error:', error);
-      alert('Failed to sign in. Please try again.');
-    }
-  };
 
   const handleGenerate = async () => {
     if (!code.trim()) {
