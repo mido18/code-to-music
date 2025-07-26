@@ -171,11 +171,12 @@ const enhanceWithMelodyRNN = async (notes: string[], temperature: number = 0.8):
   try {
     const enhancedSequence = await melodyRNNInstance.continueSequence(quantizedSequence, rnnSteps, temperature);
 
-    const enhancedNotes: string[] = enhancedSequence.notes!.map((n: MagentaNote) => {
-      if (n.pitch >= 72) return 'chime';
-      if (n.pitch <= 55) return 'bass';
-      if (n.pitch >= 57 && n.pitch < 60) return 'pad';
-      return Tone.Midi(n.pitch).toNote();
+    const enhancedNotes: string[] = enhancedSequence.notes!.map(n => {
+      const pitch = n.pitch ?? 0;
+      if (pitch >= 72) return 'chime';
+      if (pitch <= 55) return 'bass';
+      if (pitch >= 57 && pitch < 60) return 'pad';
+      return Tone.Midi(pitch).toNote();
     });
 
     // Reintroduce drum notes
