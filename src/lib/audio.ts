@@ -86,9 +86,21 @@ const triggerNote = (
   }
 };
 
+// Minimal typings to avoid `any` while staying framework-agnostic
+interface MagentaNote {
+  pitch: number;
+  [key: string]: unknown;
+}
+
+interface SimpleNoteSequence {
+  notes: MagentaNote[];
+  totalTime: number;
+  quantizationInfo: { stepsPerQuarter: number };
+}
+
 /** Convert note sequence to Magenta NoteSequence, excluding drums. */
-const notesToNoteSequence = (notes: string[]): any => {
-  const noteSequence: any = {
+const notesToNoteSequence = (notes: string[]): SimpleNoteSequence => {
+  const noteSequence: SimpleNoteSequence = {
     notes: [],
     totalTime: 0,
     quantizationInfo: { stepsPerQuarter: 4 },
@@ -102,7 +114,7 @@ const notesToNoteSequence = (notes: string[]): any => {
     if (note === 'drum') continue; // Skip drum notes
 
     let pitch: number;
-    let isDrum = false;
+    const isDrum = false;
 
     switch (note) {
       case 'chime':
@@ -141,8 +153,8 @@ const enhanceWithMelodyRNN = async (notes: string[], temperature: number = 0.8):
   const { MusicRNN } = await import('@magenta/music/es6/music_rnn');
   const mm = await import('@magenta/music/es6/core');
 
-  // Runtime instance – use `any` to avoid type issues with dynamic import
-  let melodyRNNInstance: any = new MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/basic_rnn');
+  // Runtime instance created from dynamic import
+  const melodyRNNInstance = new MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/basic_rnn');
   await melodyRNNInstance.initialize();
 
   const drumCount = notes.filter(n => n === 'drum').length;
@@ -159,7 +171,7 @@ const enhanceWithMelodyRNN = async (notes: string[], temperature: number = 0.8):
   try {
     const enhancedSequence = await melodyRNNInstance.continueSequence(quantizedSequence, rnnSteps, temperature);
 
-    let enhancedNotes: string[] = enhancedSequence.notes!.map((n: any) => {
+    const enhancedNotes: string[] = enhancedSequence.notes!.map((n: MagentaNote) => {
       if (n.pitch >= 72) return 'chime';
       if (n.pitch <= 55) return 'bass';
       if (n.pitch >= 57 && n.pitch < 60) return 'pad';
@@ -217,7 +229,7 @@ const createSongStructure = async (notes: string[]): Promise<{ note: string | { 
   }
 
   // Verse 1: Soft melody, sparse drums, C-G chord
-  let verseNotes = await enhanceWithMelodyRNN(notes, 0.9); // Softer melody
+  const verseNotes = await enhanceWithMelodyRNN(notes, 0.9); // Softer melody
   let noteIndex = 0;
   for (let i = 0; i < verseLength; i++) {
     if (noteIndex < verseNotes.length && verseNotes[noteIndex] !== 'drum') {
@@ -234,7 +246,7 @@ const createSongStructure = async (notes: string[]): Promise<{ note: string | { 
   }
 
   // Chorus 1: Bold melody, full drums, C-G-Am-F chord
-  let chorusNotes = await enhanceWithMelodyRNN(notes, 0.7); // Catchier melody
+  const chorusNotes = await enhanceWithMelodyRNN(notes, 0.7); // Catchier melody
   noteIndex = 0;
   for (let i = 0; i < chorusLength; i++) {
     if (noteIndex < chorusNotes.length) {
@@ -251,12 +263,12 @@ const createSongStructure = async (notes: string[]): Promise<{ note: string | { 
   }
 
   // Verse 2: Similar to Verse 1, slight variation
-  verseNotes = await enhanceWithMelodyRNN(notes, 0.9);
+  const verseNotes2 = await enhanceWithMelodyRNN(notes, 0.9);
   noteIndex = 0;
   for (let i = 0; i < verseLength; i++) {
-    if (noteIndex < verseNotes.length && verseNotes[noteIndex] !== 'drum') {
+    if (noteIndex < verseNotes2.length && verseNotes2[noteIndex] !== 'drum') {
       const duration = Math.random() < 0.5 ? '8n' : '4n';
-      structuredNotes.push({ note: verseNotes[noteIndex], time: currentTime, duration, velocity: 0.6 });
+      structuredNotes.push({ note: verseNotes2[noteIndex], time: currentTime, duration, velocity: 0.6 });
       noteIndex++;
     }
     if (i % 4 === 0) {
@@ -320,7 +332,7 @@ export const parseCodeToMusic = async ({ code }: CodeInput): Promise<void> => {
     }
 
     const instruments = createInstruments();
-    let notes = buildNoteSequence(counts);
+    const notes = buildNoteSequence(counts);
 
     // Create song structure
     const structuredNotes = await createSongStructure(notes);
@@ -360,7 +372,7 @@ export const generateAudio = async (code: string): Promise<string> => {
       throw new Error('No audio events generated. Please include loops, variables, if statements, functions, or comments.');
     }
 
-    let notes = buildNoteSequence(counts);
+    const notes = buildNoteSequence(counts);
     const structuredNotes = await createSongStructure(notes);
 
     const buffer = await Tone.Offline(({ transport }) => {
