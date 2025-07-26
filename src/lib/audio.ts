@@ -48,193 +48,46 @@ const createInstruments = () => {
 
   return {
     drum: new Tone.MembraneSynth().connect(reverb).toDestination(),
-    synth: new Tone.Synth({ oscillator: { type: 'triangle' } }).connect(reverb).connect(delay).toDestination(),
+    synth: new Tone.Synth({ oscillator: { type: 'triangle' }, volume: -10 }).connect(reverb).connect(delay).toDestination(),
     chime: new Tone.MetalSynth().connect(reverb).toDestination(),
-    bass: new Tone.MonoSynth({ oscillator: { type: 'sawtooth' } }).connect(reverb).toDestination(),
-    pad: new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'sine' } }).connect(reverb).connect(delay).toDestination(),
+    bass: new Tone.MonoSynth({ oscillator: { type: 'sawtooth' }, volume: -12 }).connect(reverb).toDestination(),
+    pad: new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'sine' }, volume: -8 }).connect(reverb).connect(delay).toDestination(),
   };
 };
 
 /** Trigger the appropriate instrument or chord for a given note id. */
-const triggerNote = (note: string, instruments: ReturnType<typeof createInstruments>, time = 0, duration: string = '8n') => {
-  switch (note) {
-    case 'drum':
-      instruments.drum.triggerAttackRelease('C2', duration, time);
-      break;
-    case 'chime':
-      instruments.chime.triggerAttackRelease('E5', duration, time);
-      break;
-    case 'bass':
-      instruments.bass.triggerAttackRelease('G2', duration, time);
-      break;
-    case 'pad':
-      instruments.pad.triggerAttackRelease(['C3', 'E3', 'G3'], duration, time); // C major chord
-      break;
-    default:
-      instruments.synth.triggerAttackRelease(note, duration, time);
+const triggerNote = (
+  note: string | { note: string; chord?: string[] },
+  instruments: ReturnType<typeof createInstruments>,
+  time = 0,
+  duration: string = '8n',
+  velocity: number = 1
+) => {
+  if (typeof note === 'object' && note.chord) {
+    instruments.pad.triggerAttackRelease(note.chord, duration, time, velocity);
+  } else {
+    const noteStr = typeof note === 'object' ? note.note : note;
+    switch (noteStr) {
+      case 'drum':
+        instruments.drum.triggerAttackRelease('C2', duration, time, velocity);
+        break;
+      case 'chime':
+        instruments.chime.triggerAttackRelease('E5', duration, time, velocity);
+        break;
+      case 'bass':
+        instruments.bass.triggerAttackRelease('G2', duration, time, velocity);
+        break;
+      case 'pad':
+        instruments.pad.triggerAttackRelease(['C3', 'E3', 'G3'], duration, time, velocity);
+        break;
+      default:
+        instruments.synth.triggerAttackRelease(noteStr, duration, time, velocity);
+    }
   }
 };
 
-/** Create song structure with intro, main melody, and outro. */
-const createSongStructure = (notes: string[]): { note: string, time: number, duration: string }[] => {
-  const bpm = 120;
-  const beatDuration = 60 / bpm / 2; // 8th note
-  const introLength = 4; // 4 beats (2 seconds)
-  const outroLength = 4; // 4 beats (2 seconds)
-  const mainLength = 32; // 32 beats (16 seconds)
-
-  const structuredNotes: { note: string, time: number, duration: string }[] = [];
-
-  // Intro: Drums and pad
-  let currentTime = 0;
-  for (let i = 0; i < introLength; i++) {
-    structuredNotes.push({ note: 'drum', time: currentTime, duration: '8n' });
-    if (i % 2 === 0) structuredNotes.push({ note: 'pad', time: currentTime, duration: '2n' });
-    currentTime += beatDuration;
-  }
-
-  // Main melody: Enhanced notes
-  let noteIndex = 0;
-  for (let i = 0; i < mainLength; i++) {
-    if (noteIndex < notes.length) {
-      const duration = Math.random() < 0.5 ? '8n' : '4n';
-      structuredNotes.push({ note: notes[noteIndex], time: currentTime, duration });
-      noteIndex++;
-    }
-    if (i % 4 === 0) structuredNotes.push({ note: 'pad', time: currentTime, duration: '1n' });
-    currentTime += beatDuration;
-  }
-
-  // Outro: Fade out pad
-  structuredNotes.push({ note: 'pad', time: currentTime, duration: '2n' });
-  currentTime += beatDuration * outroLength;
-
-  return structuredNotes;
-};
-
-export const parseCodeToMusic = async ({ code }: CodeInput): Promise<void> => {
-  try {
-    await Tone.start();
-    if (currentSequence) {
-      currentSequence.stop();
-      currentSequence.dispose();
-      currentSequence = null;
-    }
-    Tone.Transport.stop();
-    Tone.Transport.cancel();
-
-    const counts = extractPatternCounts(code);
-    const totalEvents = Object.values(counts).reduce((a, b) => a + b, 0);
-    if (totalEvents === 0) {
-      throw new Error('No audio events generated. Please include loops, variables, if statements, functions, or comments.');
-    }
-
-    const instruments = createInstruments();
-    let notes = buildNoteSequence(counts);
-
-    // Enhance notes with MelodyRNN (client-side call)
-    notes = await enhanceWithMelodyRNN(notes);
-
-    // Create song structure
-    const structuredNotes = createSongStructure(notes);
-
-    // Create sequence
-    currentSequence = new Tone.Sequence((time, noteData: { note: string, duration: string }) => {
-      triggerNote(noteData.note, instruments, time, noteData.duration);
-    }, structuredNotes.map(n => ({ note: n.note, duration: n.duration, time: n.time })));
-
-    Tone.Transport.bpm.value = 120;
-    currentSequence.start(0).stop('20s');
-    Tone.Transport.start();
-
-    // Fade out and stop
-    const master = Tone.getDestination();
-    Tone.Transport.schedule(() => {
-      master.volume.rampTo(-Infinity, 2);
-    }, '18s');
-    setTimeout(() => {
-      Tone.Transport.stop();
-      if (currentSequence) {
-        currentSequence.dispose();
-        currentSequence = null;
-      }
-    }, 20000);
-  } catch (error) {
-    console.error('Error in parseCodeToMusic:', error);
-    throw error;
-  }
-};
-
-export const generateAudio = async (code: string): Promise<string> => {
-  try {
-    const counts = extractPatternCounts(code);
-    const totalEvents = Object.values(counts).reduce((a, b) => a + b, 0);
-    if (totalEvents === 0) {
-      throw new Error('No audio events generated. Please include loops, variables, if statements, functions, or comments.');
-    }
-
-    let notes = buildNoteSequence(counts);
-    // Enhance notes with MelodyRNN
-    notes = await enhanceWithMelodyRNN(notes);
-
-    // Create song structure
-    const structuredNotes = createSongStructure(notes);
-
-    const buffer = await Tone.Offline(({ transport }) => {
-      const instruments = createInstruments();
-
-      const bpm = 120;
-      const master = Tone.getDestination();
-
-      for (const { note, time, duration } of structuredNotes) {
-        triggerNote(note, instruments, time, duration);
-      }
-
-      // Fade out
-      master.volume.rampTo(-Infinity, 2, 18);
-
-      transport.start(1).stop(20); // Fix transport start time to 1
-    }, 20);
-
-    console.log('Buffer duration:', buffer.duration, 'samples:', buffer.length);
-
-    // Convert ToneAudioBuffer to native AudioBuffer for WAV encoding
-    const audioBuffer = buffer.get();
-    if (!audioBuffer) {
-      throw new Error('Failed to retrieve audio buffer from Tone.Offline.');
-    }
-    const wavData = toWav(audioBuffer);
-    const wavBlob = new Blob([wavData], { type: 'audio/wav' });
-    return URL.createObjectURL(wavBlob);
-  } catch (error) {
-    console.error('Error generating WAV:', error);
-    throw error;
-  }
-};
-
-// Client-side MelodyRNN enhancement
-import type { MusicRNN as MusicRNNType } from '@magenta/music/es6/music_rnn';
-// Type-only import for core types (namespace `mm`)
-import type * as mm from '@magenta/music/es6/core';
-
-export const enhanceWithMelodyRNN = async (notes: string[]): Promise<string[]> => {
-  if (typeof window === 'undefined') {
-    // Fallback for server-side
-    return notes;
-  }
-
-  const { MusicRNN } = await import('@magenta/music/es6/music_rnn');
-  // Runtime Magenta core module (avoid namespace clash with type import)
-  const mmCore = await import('@magenta/music/es6/core');
-
-  // Use a local instance to avoid global scope issues
-  let melodyRNNInstance: MusicRNNType | null = null;
-  if (!melodyRNNInstance) {
-    melodyRNNInstance = new MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/basic_rnn');
-    await melodyRNNInstance.initialize();
-  }
-
-  // Convert notes to NoteSequence, excluding drums
+/** Convert note sequence to Magenta NoteSequence, excluding drums. */
+const notesToNoteSequence = (notes: string[]): any => {
   const noteSequence: any = {
     notes: [],
     totalTime: 0,
@@ -244,8 +97,6 @@ export const enhanceWithMelodyRNN = async (notes: string[]): Promise<string[]> =
   let currentTime = 0;
   const beatDuration = 0.5; // 8th note at 120 BPM
   const cMajorPitches = [60, 62, 64, 65, 67, 69, 71]; // C4, D4, E4, F4, G4, A4, B4
-
-  const drumCount = notes.filter(n => n === 'drum').length;
 
   for (const note of notes) {
     if (note === 'drum') continue; // Skip drum notes
@@ -278,26 +129,41 @@ export const enhanceWithMelodyRNN = async (notes: string[]): Promise<string[]> =
   }
 
   noteSequence.totalTime = currentTime;
+  return noteSequence;
+};
 
-  if (!noteSequence.notes?.length) {
-    return notes; // Fallback if no melodic notes
+/** Enhance notes with MelodyRNN in C major. */
+const enhanceWithMelodyRNN = async (notes: string[], temperature: number = 0.8): Promise<string[]> => {
+  if (typeof window === 'undefined') {
+    return notes; // Server-side fallback
   }
 
-  const quantizedSequence = mmCore.sequences.quantizeNoteSequence(noteSequence, 4);
-  const rnnSteps = 48; // 12 bars
-  const temperature = 0.8; // Catchy melody
+  const { MusicRNN } = await import('@magenta/music/es6/music_rnn');
+  const mm = await import('@magenta/music/es6/core');
+
+  // Runtime instance – use `any` to avoid type issues with dynamic import
+  let melodyRNNInstance: any = new MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/basic_rnn');
+  await melodyRNNInstance.initialize();
+
+  const drumCount = notes.filter(n => n === 'drum').length;
+  const noteSequence = notesToNoteSequence(notes);
+
+  if (!noteSequence.notes?.length) {
+    melodyRNNInstance.dispose();
+    return notes; // Fallback
+  }
+
+  const quantizedSequence = mm.sequences.quantizeNoteSequence(noteSequence, 4);
+  const rnnSteps = 32; // 8 bars for each section
 
   try {
     const enhancedSequence = await melodyRNNInstance.continueSequence(quantizedSequence, rnnSteps, temperature);
 
-    // Map enhanced notes back to instrument IDs
-    let enhancedNotes: string[] = enhancedSequence.notes!.map(n => {
-      const pitch = n.pitch;
-      if (pitch == null) return 'pad';
-      if (pitch >= 72) return 'chime'; // E5 range
-      if (pitch <= 55) return 'bass'; // G3 range
-      if (pitch >= 57 && pitch < 60) return 'pad'; // A3 range
-      return Tone.Midi(pitch).toNote(); // C major scale
+    let enhancedNotes: string[] = enhancedSequence.notes!.map((n: any) => {
+      if (n.pitch >= 72) return 'chime';
+      if (n.pitch <= 55) return 'bass';
+      if (n.pitch >= 57 && n.pitch < 60) return 'pad';
+      return Tone.Midi(n.pitch).toNote();
     });
 
     // Reintroduce drum notes
@@ -309,22 +175,217 @@ export const enhanceWithMelodyRNN = async (notes: string[]): Promise<string[]> =
     // Add rhythmic variation
     const variedNotes: string[] = [];
     for (const note of enhancedNotes) {
-      if (Math.random() < 0.1) continue; // 10% chance of rest
+      if (Math.random() < 0.1) continue; // 10% rest
       variedNotes.push(note);
     }
 
-    // Clean up MelodyRNN instance
     melodyRNNInstance.dispose();
-    melodyRNNInstance = null;
-
     return variedNotes;
   } catch (error) {
     console.error('MelodyRNN error:', error);
-    // Clean up on error
-    if (melodyRNNInstance) {
-      melodyRNNInstance.dispose();
-      melodyRNNInstance = null;
+    melodyRNNInstance.dispose();
+    return notes;
+  }
+};
+
+/** Create song structure with verse, chorus, bridge. */
+const createSongStructure = async (notes: string[]): Promise<{ note: string | { note: string; chord?: string[] }, time: number, duration: string, velocity: number }[]> => {
+  const bpm = 120;
+  const beatDuration = 60 / bpm / 2; // 8th note
+  const introLength = 4; // 2s
+  const verseLength = 16; // 8s
+  const chorusLength = 16; // 8s
+  const bridgeLength = 8; // 4s
+  const outroLength = 4; // 2s
+
+  const chords = [
+    ['C3', 'E3', 'G3'], // C major
+    ['G2', 'B2', 'D3'], // G major
+    ['A2', 'C3', 'E3'], // A minor
+    ['F2', 'A2', 'C3'], // F major
+  ];
+
+  const structuredNotes: { note: string | { note: string; chord?: string[] }, time: number, duration: string, velocity: number }[] = [];
+
+  let currentTime = 0;
+
+  // Intro: Drums and pad (C major)
+  for (let i = 0; i < introLength; i++) {
+    structuredNotes.push({ note: 'drum', time: currentTime, duration: '8n', velocity: 0.7 });
+    if (i % 2 === 0) structuredNotes.push({ note: { note: 'pad', chord: chords[0] }, time: currentTime, duration: '2n', velocity: 0.5 });
+    currentTime += beatDuration;
+  }
+
+  // Verse 1: Soft melody, sparse drums, C-G chord
+  let verseNotes = await enhanceWithMelodyRNN(notes, 0.9); // Softer melody
+  let noteIndex = 0;
+  for (let i = 0; i < verseLength; i++) {
+    if (noteIndex < verseNotes.length && verseNotes[noteIndex] !== 'drum') {
+      const duration = Math.random() < 0.5 ? '8n' : '4n';
+      structuredNotes.push({ note: verseNotes[noteIndex], time: currentTime, duration, velocity: 0.6 });
+      noteIndex++;
     }
-    return notes; // Fallback
+    if (i % 4 === 0) {
+      const chordIndex = Math.floor(i / 8) % 2; // C-G
+      structuredNotes.push({ note: { note: 'pad', chord: chords[chordIndex] }, time: currentTime, duration: '1n', velocity: 0.5 });
+    }
+    if (i % 8 === 0) structuredNotes.push({ note: 'drum', time: currentTime, duration: '8n', velocity: 0.6 });
+    currentTime += beatDuration;
+  }
+
+  // Chorus 1: Bold melody, full drums, C-G-Am-F chord
+  let chorusNotes = await enhanceWithMelodyRNN(notes, 0.7); // Catchier melody
+  noteIndex = 0;
+  for (let i = 0; i < chorusLength; i++) {
+    if (noteIndex < chorusNotes.length) {
+      const duration = Math.random() < 0.5 ? '8n' : '4n';
+      structuredNotes.push({ note: chorusNotes[noteIndex], time: currentTime, duration, velocity: 0.9 });
+      noteIndex++;
+    }
+    if (i % 4 === 0) {
+      const chordIndex = i / 4; // C-G-Am-F
+      structuredNotes.push({ note: { note: 'pad', chord: chords[chordIndex] }, time: currentTime, duration: '1n', velocity: 0.7 });
+    }
+    if (i % 2 === 0) structuredNotes.push({ note: 'drum', time: currentTime, duration: '8n', velocity: 0.8 });
+    currentTime += beatDuration;
+  }
+
+  // Verse 2: Similar to Verse 1, slight variation
+  verseNotes = await enhanceWithMelodyRNN(notes, 0.9);
+  noteIndex = 0;
+  for (let i = 0; i < verseLength; i++) {
+    if (noteIndex < verseNotes.length && verseNotes[noteIndex] !== 'drum') {
+      const duration = Math.random() < 0.5 ? '8n' : '4n';
+      structuredNotes.push({ note: verseNotes[noteIndex], time: currentTime, duration, velocity: 0.6 });
+      noteIndex++;
+    }
+    if (i % 4 === 0) {
+      const chordIndex = Math.floor(i / 8) % 2;
+      structuredNotes.push({ note: { note: 'pad', chord: chords[chordIndex] }, time: currentTime, duration: '1n', velocity: 0.5 });
+    }
+    if (i % 8 === 0) structuredNotes.push({ note: 'drum', time: currentTime, duration: '8n', velocity: 0.6 });
+    currentTime += beatDuration;
+  }
+
+  // Bridge: Chime-led, Am-F chord, no drums
+  noteIndex = 0;
+  for (let i = 0; i < bridgeLength; i++) {
+    if (i % 2 === 0) structuredNotes.push({ note: 'chime', time: currentTime, duration: '4n', velocity: 0.7 });
+    if (i % 4 === 0) {
+      const chordIndex = (i / 4) + 2; // Am-F
+      structuredNotes.push({ note: { note: 'pad', chord: chords[chordIndex] }, time: currentTime, duration: '1n', velocity: 0.6 });
+    }
+    currentTime += beatDuration;
+  }
+
+  // Chorus 2: Repeat chorus, slightly louder
+  noteIndex = 0;
+  for (let i = 0; i < chorusLength; i++) {
+    if (noteIndex < chorusNotes.length) {
+      const duration = Math.random() < 0.5 ? '8n' : '4n';
+      structuredNotes.push({ note: chorusNotes[noteIndex], time: currentTime, duration, velocity: 1.0 });
+      noteIndex++;
+    }
+    if (i % 4 === 0) {
+      const chordIndex = i / 4;
+      structuredNotes.push({ note: { note: 'pad', chord: chords[chordIndex] }, time: currentTime, duration: '1n', velocity: 0.8 });
+    }
+    if (i % 2 === 0) structuredNotes.push({ note: 'drum', time: currentTime, duration: '8n', velocity: 0.9 });
+    currentTime += beatDuration;
+  }
+
+  // Outro: Pad and chime fade
+  structuredNotes.push({ note: { note: 'pad', chord: chords[0] }, time: currentTime, duration: '2n', velocity: 0.5 });
+  structuredNotes.push({ note: 'chime', time: currentTime, duration: '2n', velocity: 0.5 });
+  currentTime += beatDuration * outroLength;
+
+  return structuredNotes;
+};
+
+export const parseCodeToMusic = async ({ code }: CodeInput): Promise<void> => {
+  try {
+    await Tone.start();
+    if (currentSequence) {
+      currentSequence.stop();
+      currentSequence.dispose();
+      currentSequence = null;
+    }
+    Tone.Transport.stop();
+    Tone.Transport.cancel();
+
+    const counts = extractPatternCounts(code);
+    const totalEvents = Object.values(counts).reduce((a, b) => a + b, 0);
+    if (totalEvents === 0) {
+      throw new Error('No audio events generated. Please include loops, variables, if statements, functions, or comments.');
+    }
+
+    const instruments = createInstruments();
+    let notes = buildNoteSequence(counts);
+
+    // Create song structure
+    const structuredNotes = await createSongStructure(notes);
+
+    // Create sequence
+    currentSequence = new Tone.Sequence((time, noteData: { note: string | { note: string; chord?: string[] }, duration: string, velocity: number }) => {
+      triggerNote(noteData.note, instruments, time, noteData.duration, noteData.velocity);
+    }, structuredNotes.map(n => ({ note: n.note, duration: n.duration, velocity: n.velocity, time: n.time })));
+
+    Tone.Transport.bpm.value = 120;
+    currentSequence.start(0).stop('40s');
+    Tone.Transport.start();
+
+    // Fade out and stop
+    const master = Tone.getDestination();
+    Tone.Transport.schedule(() => {
+      master.volume.rampTo(-Infinity, 2);
+    }, '38s');
+    setTimeout(() => {
+      Tone.Transport.stop();
+      if (currentSequence) {
+        currentSequence.dispose();
+        currentSequence = null;
+      }
+    }, 40000);
+  } catch (error) {
+    console.error('Error in parseCodeToMusic:', error);
+    throw error;
+  }
+};
+
+export const generateAudio = async (code: string): Promise<string> => {
+  try {
+    const counts = extractPatternCounts(code);
+    const totalEvents = Object.values(counts).reduce((a, b) => a + b, 0);
+    if (totalEvents === 0) {
+      throw new Error('No audio events generated. Please include loops, variables, if statements, functions, or comments.');
+    }
+
+    let notes = buildNoteSequence(counts);
+    const structuredNotes = await createSongStructure(notes);
+
+    const buffer = await Tone.Offline(({ transport }) => {
+      const instruments = createInstruments();
+      const master = Tone.getDestination();
+
+      for (const { note, time, duration, velocity } of structuredNotes) {
+        triggerNote(note, instruments, time, duration, velocity);
+      }
+
+      master.volume.rampTo(-Infinity, 2, 38);
+      transport.start(0).stop(40);
+    }, 40);
+
+    console.log('Buffer duration:', buffer.duration, 'samples:', buffer.length);
+
+    const audioBuffer = buffer.get();
+    if (!audioBuffer) {
+      throw new Error('Failed to retrieve audio buffer from Tone.Offline.');
+    }
+    const wavData = toWav(audioBuffer);
+    const wavBlob = new Blob([wavData], { type: 'audio/wav' });
+    return URL.createObjectURL(wavBlob);
+  } catch (error) {
+    console.error('Error generating WAV:', error);
+    throw error;
   }
 };
